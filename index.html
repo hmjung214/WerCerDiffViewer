@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WER/CER 비교 뷰어 (REF vs HYP)</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#111827; --panel2:#0f172a; --text:#e5e7eb; --muted:#9ca3af;
+      --ok:#153a22; --sub:#3a1a1a; --del:#3a2e10; --ins:#11263a;
+      --border:#243244;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", Arial, sans-serif;}
+    .wrap{max-width:1200px; margin:0 auto; padding:18px;}
+    h1{margin:0 0 12px; font-size:20px; font-weight:800;}
+    .grid{display:grid; grid-template-columns: 1fr; gap:12px;}
+    @media (min-width: 980px){ .grid{grid-template-columns: 420px 1fr;} }
+    .card{background:linear-gradient(180deg, var(--panel), var(--panel2)); border:1px solid var(--border); border-radius:14px; padding:14px; box-shadow: 0 10px 30px rgba(0,0,0,.25);}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+    label{font-size:12px; color:var(--muted)}
+    input[type=file]{width:100%; padding:8px; border:1px dashed var(--border); border-radius:10px; background:rgba(255,255,255,.03); color:var(--text)}
+    button{appearance:none; border:1px solid var(--border); background:rgba(255,255,255,.06); color:var(--text); padding:10px 12px; border-radius:12px; font-weight:700; cursor:pointer;}
+    button:hover{background:rgba(255,255,255,.1)}
+    button:disabled{opacity:.45; cursor:not-allowed}
+    .small{font-size:12px; color:var(--muted); line-height:1.4}
+    .pill{display:inline-flex; gap:6px; align-items:center; padding:2px 10px; border-radius:999px; border:1px solid var(--border); font-size:12px; color:var(--muted)}
+    .legend{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+    .tag{display:inline-flex; gap:8px; align-items:center; padding:2px 10px; border-radius:999px; border:1px solid var(--border); font-size:12px; color:var(--text)}
+    .sw{width:10px; height:10px; border-radius:3px; border:1px solid rgba(255,255,255,.15)}
+
+    table{width:100%; border-collapse:separate; border-spacing:0; font-size:13px;}
+    th, td{padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top;}
+    th{color:var(--muted); font-weight:700; text-align:left; position:sticky; top:0; background:rgba(17,24,39,.92); backdrop-filter: blur(6px);}
+    tr:hover td{background:rgba(255,255,255,.03)}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+    .click{cursor:pointer}
+
+    .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px}
+    .controls > *{flex:0 0 auto}
+    .controls input[type=checkbox]{transform: translateY(1px)}
+    .controls input[type=number]{width:90px; padding:8px; border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.03); color:var(--text)}
+
+    .diffHeader{display:flex; gap:10px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap;}
+    .diffHeader h2{margin:0; font-size:16px; font-weight:800}
+    .diffMeta{display:flex; gap:8px; flex-wrap:wrap}
+
+    .diffArea{margin-top:10px; overflow:auto; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,.02)}
+    .diffTable{width:100%; table-layout: fixed;}
+    .diffTable td{border-bottom:1px solid var(--border)}
+    .rowLabel{width:70px; color:var(--muted); font-weight:800; background:rgba(0,0,0,.15)}
+    .cell{word-break:break-word; padding:6px 8px; font-size:12px; border-left:1px solid var(--border)}
+    .blank{color:var(--muted)}
+
+    /* 세로 비교용 */
+    .vTable{width:100%; border-collapse:separate; border-spacing:0; table-layout:auto;}
+    .vTable th, .vTable td{border-bottom:1px solid var(--border); padding:8px 10px; font-size:12px; vertical-align:top;}
+    .vIdx{width:70px; color:var(--muted); font-weight:800; background:rgba(0,0,0,.15)}
+    .vRef{width:48%;}
+    .vHyp{width:48%;}
+    .vCell{word-break:break-word; white-space:pre-wrap;}
+    .vBlank{color:var(--muted);}
+    .ok{background:rgba(21,58,34,.75)}
+    .sub{background:rgba(58,26,26,.75)}
+    .del{background:rgba(58,46,16,.75)}
+    .ins{background:rgba(17,38,58,.75)}
+    .segTitle{padding:8px 10px; color:var(--muted); font-size:12px; border-bottom:1px dashed var(--border)}
+
+    .toast{margin-top:10px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,.03); color:var(--muted); font-size:12px; line-height:1.4}
+    .danger{color:#fecaca}
+
+    .footer{margin-top:14px; color:var(--muted); font-size:12px}
+    a{color:#93c5fd}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>WER/CER 비교 뷰어 (전사문 REF vs STT HYP)</h1>
+
+    <div class="grid">
+      <div class="card">
+        <div class="row" style="justify-content:space-between; align-items:flex-start; gap:12px;">
+          <div style="flex:1; min-width:240px;">
+            <label>레퍼런스(전사문) 파일 1개</label>
+            <input id="refFile" type="file" accept=".txt" />
+          </div>
+          <div style="flex:1; min-width:240px;">
+            <label>가설(STT 결과) 파일 여러 개</label>
+            <input id="hypFiles" type="file" accept=".txt" multiple />
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px; justify-content:space-between;">
+          <button id="btnCompute" disabled>계산하기</button>
+          <span class="pill"><span class="mono" id="status">대기</span></span>
+        </div>
+
+        <div class="toast" id="note">
+          <div style="font-weight:800; margin-bottom:6px;">정규화 규칙</div>
+          <div>• NFC 정규화</div>
+          <div>• <span class="mono">[ ... ]</span> 타임태그 제거</div>
+          <div>• <span class="mono">\r \t BOM</span> 제거, 줄바꿈 → 공백, 연속 공백 정리</div>
+          <div class="danger" style="margin-top:6px;">※ 구두점/숫자/의미 기반 정규화는 하지 않습니다.</div>
+        </div>
+
+        <div class="legend">
+          <span class="tag"><span class="sw" style="background:rgba(21,58,34,.9)"></span>정답(OK)</span>
+          <span class="tag"><span class="sw" style="background:rgba(58,26,26,.9)"></span>치환(SUB)</span>
+          <span class="tag"><span class="sw" style="background:rgba(58,46,16,.9)"></span>삭제(DEL)</span>
+          <span class="tag"><span class="sw" style="background:rgba(17,38,58,.9)"></span>삽입(INS)</span>
+          <span class="small">∅ 는 해당 위치에 토큰이 없음을 의미합니다.</span>
+        </div>
+
+        <div class="footer">
+          • 이 페이지는 <b>단일 HTML 파일</b>로 동작합니다. 서버 없이도 브라우저에서 열어 사용할 수 있습니다.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="diffHeader">
+          <div>
+            <h2 id="rightTitle">결과</h2>
+            <div class="small" id="rightSub">REF/HYP를 업로드하고 계산을 누르세요.</div>
+          </div>
+          <div class="diffMeta" id="meta"></div>
+        </div>
+
+        <div class="controls">
+          <span class="pill">레벨:
+            <select id="level" style="margin-left:8px; padding:6px 8px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,.03); color:var(--text)">
+              <option value="word" selected>word (WER)</option>
+              <option value="char">char (CER)</option>
+            </select>
+          </span>
+          <span class="pill">보기 방식:
+            <select id="layout" style="margin-left:8px; padding:6px 8px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,.03); color:var(--text)">
+              <option value="vertical" selected>세로(추천)</option>
+              <option value="horizontal">가로(기존)</option>
+            </select>
+          </span>
+          <label class="pill"><input id="hideOk" type="checkbox" /> 정답 숨김</label>
+          <span class="pill">오류 주변
+            <input id="ctx" type="number" min="1" max="50" value="6" />
+          </span>
+          <label class="pill"><input id="full" type="checkbox" /> 전체 표시(긴 문서 주의)</label>
+        </div>
+
+        <div style="margin-top:10px; overflow:auto; max-height:320px; border:1px solid var(--border); border-radius:12px;">
+          <table id="tbl">
+            <thead>
+              <tr>
+                <th style="width:38px;">#</th>
+                <th>File</th>
+                <th style="width:90px;">WER</th>
+                <th style="width:90px;">CER</th>
+                <th style="width:70px;">S</th>
+                <th style="width:70px;">I</th>
+                <th style="width:70px;">D</th>
+                <th style="width:70px;">H</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="8" class="small">아직 계산 결과가 없습니다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="diff" class="diffArea" style="margin-top:12px;">
+          <div class="segTitle">여기에 diff가 표시됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ----------------------------
+  // Utilities
+  // ----------------------------
+  const $ = (id) => document.getElementById(id);
+
+  function normalizeText(text) {
+    // (1) NFC
+    text = (text ?? "").normalize("NFC");
+    // (2) [ ... ] 제거
+    text = text.replace(/\[.*?\]/gs, "");
+    // (3) 제어문자 제거
+    text = text.replace(/\r/g, "").replace(/\t/g, "").replace(/\uFEFF/g, "");
+    // (4) 줄바꿈 -> 공백
+    text = text.replace(/\n/g, " ");
+    // (5) 공백 정리
+    text = text.replace(/\s+/g, " ").trim();
+    return text;
+  }
+
+  function readFileText(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(fr.error);
+      fr.onload = () => resolve(fr.result ?? "");
+      fr.readAsText(file, "utf-8");
+    });
+  }
+
+  function escapeHtml(s) {
+    return (s ?? "").replace(/[&<>\"']/g, (c) => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;"
+    }[c]));
+  }
+
+  // ----------------------------
+  // Myers diff (O((N+M)D)) for sequences
+  // Returns script of ops: {type:'equal'|'insert'|'delete', value}
+  // ----------------------------
+  function myersDiff(a, b) {
+    const N = a.length, M = b.length;
+    const max = N + M;
+    const v = new Map();
+    v.set(1, 0);
+    const trace = [];
+
+    function getV(k) { return v.has(k) ? v.get(k) : -Infinity; }
+
+    for (let d = 0; d <= max; d++) {
+      const vSnapshot = new Map(v);
+      trace.push(vSnapshot);
+      for (let k = -d; k <= d; k += 2) {
+        let x;
+        const down = (k === -d) || (k !== d && getV(k - 1) < getV(k + 1));
+        if (down) {
+          x = getV(k + 1); // insertion
+        } else {
+          x = getV(k - 1) + 1; // deletion
+        }
+        let y = x - k;
+        while (x < N && y < M && a[x] === b[y]) {
+          x++; y++;
+        }
+        v.set(k, x);
+        if (x >= N && y >= M) {
+          return backtrack(trace, a, b);
+        }
+      }
+    }
+    return backtrack(trace, a, b);
+  }
+
+  function backtrack(trace, a, b) {
+    let x = a.length;
+    let y = b.length;
+    const script = [];
+
+    function getV(map, k) { return map.has(k) ? map.get(k) : -Infinity; }
+
+    for (let d = trace.length - 1; d >= 0; d--) {
+      const v = trace[d];
+      const k = x - y;
+      let prevK;
+      const down = (k === -d) || (k !== d && getV(v, k - 1) < getV(v, k + 1));
+      if (down) {
+        prevK = k + 1;
+      } else {
+        prevK = k - 1;
+      }
+
+      const prevX = getV(v, prevK);
+      const prevY = prevX - prevK;
+
+      while (x > prevX && y > prevY) {
+        script.push({ type: "equal", valueA: a[x - 1], valueB: b[y - 1] });
+        x--; y--;
+      }
+
+      if (d === 0) break;
+
+      if (down) {
+        script.push({ type: "insert", valueB: b[y - 1] });
+        y--;
+      } else {
+        script.push({ type: "delete", valueA: a[x - 1] });
+        x--;
+      }
+    }
+
+    script.reverse();
+    return script;
+  }
+
+  // ----------------------------
+  // Convert diff script -> token pairs with ok/sub/ins/del
+  // Combine adjacent delete+insert into substitution.
+  // pairs: {ref:string, hyp:string, op:'ok'|'sub'|'del'|'ins'}
+  // counts: {S,I,D,H}
+  // ----------------------------
+  function scriptToPairs(script) {
+    const pairs = [];
+    let i = 0;
+    let S = 0, I = 0, D = 0, H = 0;
+
+    while (i < script.length) {
+      const op = script[i];
+      if (op.type === "equal") {
+        pairs.push({ ref: op.valueA, hyp: op.valueB, op: "ok" });
+        H++; i++; continue;
+      }
+
+      // substitution: one or more deletes followed by one or more inserts
+      if (op.type === "delete") {
+        const dels = [];
+        while (i < script.length && script[i].type === "delete") {
+          dels.push(script[i].valueA);
+          i++;
+        }
+        const ins = [];
+        let j = i;
+        while (j < script.length && script[j].type === "insert") {
+          ins.push(script[j].valueB);
+          j++;
+        }
+
+        const k = Math.min(dels.length, ins.length);
+        for (let t = 0; t < k; t++) {
+          pairs.push({ ref: dels[t], hyp: ins[t], op: "sub" });
+          S++;
+        }
+        for (let t = k; t < dels.length; t++) {
+          pairs.push({ ref: dels[t], hyp: "", op: "del" });
+          D++;
+        }
+        for (let t = k; t < ins.length; t++) {
+          pairs.push({ ref: "", hyp: ins[t], op: "ins" });
+          I++;
+        }
+        i = j;
+        continue;
+      }
+
+      if (op.type === "insert") {
+        pairs.push({ ref: "", hyp: op.valueB, op: "ins" });
+        I++; i++; continue;
+      }
+
+      // fallback
+      i++;
+    }
+
+    return { pairs, counts: { S, I, D, H } };
+  }
+
+  function werFromCounts(counts, refLen) {
+    if (!refLen) return 0;
+    return (counts.S + counts.I + counts.D) / refLen;
+  }
+
+  // ----------------------------
+  // Windowing around errors to avoid huge DOM
+  // ----------------------------
+  function computeWindows(pairs, context, maxWindows) {
+    const err = [];
+    for (let i = 0; i < pairs.length; i++) {
+      if (pairs[i].op !== "ok") err.push(i);
+    }
+    if (err.length === 0) return [[0, Math.min(pairs.length, 200)]];
+
+    const windows = [];
+    let start = Math.max(err[0] - context, 0);
+    let end = Math.min(err[0] + context + 1, pairs.length);
+
+    for (let idx = 1; idx < err.length; idx++) {
+      const i = err[idx];
+      const s = Math.max(i - context, 0);
+      const e = Math.min(i + context + 1, pairs.length);
+      if (s <= end) end = Math.max(end, e);
+      else {
+        windows.push([start, end]);
+        start = s; end = e;
+      }
+    }
+    windows.push([start, end]);
+    return windows.slice(0, maxWindows);
+  }
+
+  // ----------------------------
+  // Render diff pairs into HTML (REF row above, HYP row below)
+  // ----------------------------
+  function renderDiffVertical(pairs, opts) {
+    const { showOk, context, full } = opts;
+    const MAX_WINDOWS = 120;
+    const windows = full
+      ? [[0, pairs.length]]
+      : (pairs.length > 400 ? computeWindows(pairs, context, MAX_WINDOWS) : [[0, pairs.length]]);
+
+    const segs = windows.map(([s, e]) => {
+      const seg = pairs.slice(s, e);
+      const rows = [];
+
+      for (let idx = 0; idx < seg.length; idx++) {
+        const p = seg[idx];
+        if (!showOk && p.op === "ok") continue;
+        const r = p.ref ? escapeHtml(p.ref) : "∅";
+        const h = p.hyp ? escapeHtml(p.hyp) : "∅";
+        rows.push(`
+          <tr class="${p.op}">
+            <td class="vIdx mono">${s + idx}</td>
+            <td class="vCell vRef ${p.op}">${r}</td>
+            <td class="vCell vHyp ${p.op}">${h}</td>
+          </tr>
+        `);
+      }
+
+      return `
+        <div class="segTitle">tokens [${s}:${e}]</div>
+        <table class="vTable">
+          <thead>
+            <tr>
+              <th class="vIdx">idx</th>
+              <th class="vRef">REF</th>
+              <th class="vHyp">HYP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.join("") || `<tr><td colspan="3" class="small">(이 구간은 모두 정답이어서 숨김 처리되었습니다)</td></tr>`}
+          </tbody>
+        </table>
+      `;
+    }).join("<div style=\"border-top:1px dashed var(--border)\"></div>");
+
+    return segs || `<div class="segTitle">표시할 내용이 없습니다.</div>`;
+  }
+
+  function renderDiff(pairs, opts) {
+    const { showOk, context, full, layout } = opts;
+
+    if (layout === "vertical") {
+      return renderDiffVertical(pairs, { showOk, context, full });
+    }
+
+    // 기존 가로 렌더링
+    const MAX_WINDOWS = 80;
+
+    const windows = full
+      ? [[0, pairs.length]]
+      : (pairs.length > 400 ? computeWindows(pairs, context, MAX_WINDOWS) : [[0, pairs.length]]);
+
+    const segs = windows.map(([s,e]) => {
+      const seg = pairs.slice(s,e);
+      const refCells = seg.map(p => {
+        const cls = p.op;
+        const v = p.ref ? escapeHtml(p.ref) : "∅";
+        if (!showOk && cls === "ok") return `<td class="cell blank"> </td>`;
+        return `<td class="cell ${cls}">${v}</td>`;
+      }).join("");
+
+      const hypCells = seg.map(p => {
+        const cls = p.op;
+        const v = p.hyp ? escapeHtml(p.hyp) : "∅";
+        if (!showOk && cls === "ok") return `<td class="cell blank"> </td>`;
+        return `<td class="cell ${cls}">${v}</td>`;
+      }).join("");
+
+      return `
+        <div class="segTitle">tokens [${s}:${e}]</div>
+        <table class="diffTable">
+          <tr>
+            <td class="rowLabel">REF</td>
+            ${refCells}
+          </tr>
+          <tr>
+            <td class="rowLabel">HYP</td>
+            ${hypCells}
+          </tr>
+        </table>
+      `;
+    }).join("<div style=\"border-top:1px dashed var(--border)\"></div>");
+
+    return segs || `<div class="segTitle">표시할 내용이 없습니다.</div>`;
+  }
+
+  // ----------------------------
+  // App state
+  // ----------------------------
+  const state = {
+    ref: null,
+    refTokensWord: null,
+    refTokensChar: null,
+    hyps: [], // {name, text, tokensWord, tokensChar, resWord, resChar}
+    selectedName: null,
+  };
+
+  function setStatus(msg) { $("status").textContent = msg; }
+
+  function canCompute() {
+    const ok = !!state.ref && state.hyps.length > 0;
+    $("btnCompute").disabled = !ok;
+  }
+
+  // ----------------------------
+  // File handlers
+  // ----------------------------
+  $("refFile").addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setStatus("REF 읽는 중...");
+    const raw = await readFileText(f);
+    state.ref = normalizeText(raw);
+    state.refTokensWord = state.ref.length ? state.ref.split(" ") : [];
+    state.refTokensChar = Array.from(state.ref);
+    setStatus(`REF 준비됨 (${state.refTokensWord.length} words)`);
+    canCompute();
+  });
+
+  $("hypFiles").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setStatus("HYP 읽는 중...");
+    const hyps = [];
+    for (const f of files) {
+      const raw = await readFileText(f);
+      const text = normalizeText(raw);
+      hyps.push({
+        name: f.name,
+        text,
+        tokensWord: text.length ? text.split(" ") : [],
+        tokensChar: Array.from(text),
+        resWord: null,
+        resChar: null
+      });
+    }
+    hyps.sort((a,b)=>a.name.localeCompare(b.name));
+    state.hyps = hyps;
+    setStatus(`HYP 준비됨 (${hyps.length} files)`);
+    canCompute();
+  });
+
+  // ----------------------------
+  // Compute
+  // ----------------------------
+  function computeOne(level, refTokens, hypTokens) {
+    const script = myersDiff(refTokens, hypTokens);
+    const { pairs, counts } = scriptToPairs(script);
+
+    const refLen = refTokens.length;
+    const hypLen = hypTokens.length;
+
+    const errRate = level === "word" ? werFromCounts(counts, refLen) : (refLen ? (counts.S + counts.I + counts.D) / refLen : 0);
+
+    return { pairs, counts, refLen, hypLen, rate: errRate };
+  }
+
+  $("btnCompute").addEventListener("click", async () => {
+    if (!state.ref) return;
+    setStatus("계산 중...");
+
+    const refW = state.refTokensWord ?? [];
+    const refC = state.refTokensChar ?? [];
+
+    // Compute word+char for each hyp
+    // NOTE: very long char sequences can be heavy.
+    for (const h of state.hyps) {
+      h.resWord = computeOne("word", refW, h.tokensWord);
+      // CER용 char diff는 길면 매우 무거울 수 있어, 일정 길이 이상은 계산하지 않도록 옵션 제공
+      const CHAR_LIMIT = 12000; // 필요하면 올리세요
+      if (refC.length <= CHAR_LIMIT && h.tokensChar.length <= CHAR_LIMIT) {
+        h.resChar = computeOne("char", refC, h.tokensChar);
+      } else {
+        h.resChar = { pairs: [], counts: {S:0,I:0,D:0,H:0}, refLen: refC.length, hypLen: h.tokensChar.length, rate: NaN, skipped: true };
+      }
+    }
+
+    renderTable();
+    setStatus("완료");
+
+    // 기본으로 첫 번째 파일 선택
+    if (state.hyps.length) {
+      selectHyp(state.hyps[0].name);
+    }
+  });
+
+  // ----------------------------
+  // Render results table
+  // ----------------------------
+  function fmt(n) {
+    if (Number.isNaN(n)) return "-";
+    return (Math.round(n * 10000) / 10000).toFixed(4);
+  }
+
+  function renderTable() {
+    const tbody = $("tbody");
+    tbody.innerHTML = "";
+
+    state.hyps.forEach((h, idx) => {
+      const w = h.resWord?.rate ?? NaN;
+      const c = h.resChar?.rate ?? NaN;
+      const counts = h.resWord?.counts ?? {S:0,I:0,D:0,H:0};
+
+      const tr = document.createElement("tr");
+      tr.className = "click";
+      tr.innerHTML = `
+        <td class="mono">${idx+1}</td>
+        <td class="mono">${escapeHtml(h.name)}</td>
+        <td class="mono">${fmt(w)}</td>
+        <td class="mono">${fmt(c)}</td>
+        <td class="mono">${counts.S}</td>
+        <td class="mono">${counts.I}</td>
+        <td class="mono">${counts.D}</td>
+        <td class="mono">${counts.H}</td>
+      `;
+      tr.addEventListener("click", () => selectHyp(h.name));
+      tbody.appendChild(tr);
+    });
+
+    $("rightTitle").textContent = `결과 (${state.hyps.length} files)`;
+    $("rightSub").textContent = "행을 클릭하면 아래에 REF/HYP diff가 표시됩니다.";
+  }
+
+  // ----------------------------
+  // Diff view
+  // ----------------------------
+  function selectHyp(name) {
+    state.selectedName = name;
+    const h = state.hyps.find(x => x.name === name);
+    if (!h) return;
+
+    const level = $("level").value;
+    const layout = $("layout").value;
+    const showOk = !$("hideOk").checked;
+    const context = Math.max(1, Math.min(50, parseInt($("ctx").value || "6", 10)));
+    const full = $("full").checked;
+
+    const out = (level === "word") ? h.resWord : h.resChar;
+
+    // Meta pills
+    const meta = $("meta");
+    meta.innerHTML = "";
+
+    const pills = [];
+    if (level === "word") {
+      pills.push(["WER", fmt(out?.rate ?? NaN)]);
+      pills.push(["S", out?.counts?.S ?? 0]);
+      pills.push(["I", out?.counts?.I ?? 0]);
+      pills.push(["D", out?.counts?.D ?? 0]);
+      pills.push(["H", out?.counts?.H ?? 0]);
+      pills.push(["REF words", out?.refLen ?? 0]);
+      pills.push(["HYP words", out?.hypLen ?? 0]);
+    } else {
+      pills.push(["CER", fmt(out?.rate ?? NaN)]);
+      pills.push(["REF chars", out?.refLen ?? 0]);
+      pills.push(["HYP chars", out?.hypLen ?? 0]);
+      if (out?.skipped) pills.push(["CER", "길이 제한으로 스킵됨"]); 
+    }
+
+    for (const [k, v] of pills) {
+      const el = document.createElement("span");
+      el.className = "pill";
+      el.innerHTML = `<span class="mono">${escapeHtml(String(k))}: ${escapeHtml(String(v))}</span>`;
+      meta.appendChild(el);
+    }
+
+    const diff = $("diff");
+    if (!out || (level === "char" && out.skipped)) {
+      diff.innerHTML = `<div class="segTitle">char 레벨은 길이 제한(기본 12000 chars) 때문에 스킵되었습니다. (코드 상 CHAR_LIMIT 조정 가능)</div>`;
+      return;
+    }
+
+    diff.innerHTML = renderDiff(out.pairs, { showOk, context, full, layout });
+    $("rightSub").textContent = `${name} (${level}) diff 표시 중`;
+  }
+
+  // Rerender on control changes
+  ["level","layout","hideOk","ctx","full"].forEach(id => {
+    $(id).addEventListener("change", () => {
+      const name = state.selectedName || state.hyps[0]?.name;
+      if (name) selectHyp(name);
+    });
+  });
+
+  setStatus("대기");
+</script>
+</body>
+</html>
