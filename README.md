@@ -51,7 +51,7 @@
 
 ## 파일 구성
 
-* `wer_viewer.html` (단일 파일)
+* `index.html` (단일 파일)
 
   * HTML/CSS/JS가 모두 포함된 실행 파일
 
